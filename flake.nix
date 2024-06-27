@@ -13,7 +13,7 @@
 
       pname = "softether";
       version = "5.02.5183";
-      src = /home/siddharth/projects/github/SoftEtherVPN-fork;
+      src = /home/siddharth/projects/github/SoftEtherVPN;
       dontFixCmake = true;
       buildInputs = with pkgs; [ 
         libsodium 
@@ -47,7 +47,7 @@
 
       pname = "softether";
       version = "5.02.5183";
-      src = /home/siddharth/projects/github/SoftEtherVPN-fork;
+      src = /home/siddharth/projects/github/SoftEtherVPN;
       dontFixCmake = true;
       buildInputs = with pkgs; [ 
         libsodium 
@@ -79,7 +79,7 @@
 
       pname = "softether";
       version = "5.02.5183";
-      src = /home/siddharth/projects/github/SoftEtherVPN-fork;
+      src = /home/siddharth/projects/github/SoftEtherVPN;
       dontFixCmake = true;
       buildInputs = with pkgs; [ 
         libsodium 
