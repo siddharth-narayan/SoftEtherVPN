@@ -1,0 +1,54 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 0,
+        "narHash": "sha256-pL9jeus5QpX5R+9rsp3hhZ+uplVHscNJh8n8VpqscM0=",
+        "path": "/nix/store/8s55w0927lh3mdbkxf434zb0c5hqsz8z-source",
+        "type": "path"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 0,
+        "narHash": "sha256-pL9jeus5QpX5R+9rsp3hhZ+uplVHscNJh8n8VpqscM0=",
+        "path": "/nix/store/8s55w0927lh3mdbkxf434zb0c5hqsz8z-source",
+        "type": "path"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      }
+    },
+    "openssl": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1718871354,
+        "narHash": "sha256-aJD2E6E69iZHwPkuvRDJ4QO6iK1U18jSG/43fMLSqZE=",
+        "owner": "siddharth-narayan",
+        "repo": "openssl-with-providers",
+        "rev": "6fd82de74d6d62d1d6727af971b90b9ec4d114c7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "siddharth-narayan",
+        "repo": "openssl-with-providers",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "openssl": "openssl"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
