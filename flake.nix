@@ -29,8 +29,10 @@
       
       postInstall = ''
         echo fixing double slash
-        sed 's|//|/|g' $out/lib/pkgconfig/liboqs.pc > $out/lib/pkgconfig/liboqs.pc.tmp
-        cp $out/lib/pkgconfig/liboqs.pc.tmp $out/lib/pkgconfig/liboqs.pc
+        if [ -f "$out/lib/pkgconfig/liboqs.pc" ]; then
+          sed 's|//|/|g' $out/lib/pkgconfig/liboqs.pc > $out/lib/pkgconfig/liboqs.pc.tmp
+          cp $out/lib/pkgconfig/liboqs.pc.tmp $out/lib/pkgconfig/liboqs.pc
+        fi
       '';
 
       meta = with pkgs.lib; {
@@ -44,7 +46,7 @@
   in
   {
     packages.x86_64-linux.default = softether.overrideAttrs (old: {buildInputs = old.buildInputs ++ [ pkgs.openssl ]; });
-
+    packages.x86_64-linux.openssl1 = softether.overrideAttrs (old: {buildInputs = old.buildInputs ++ [ pkgs.openssl_1_1 ]; });
     devShells.x86_64-linux.default = pkgs.mkShell {
       packages = with pkgs; [
         libgcc
