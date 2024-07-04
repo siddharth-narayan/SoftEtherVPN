@@ -8103,7 +8103,7 @@ ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
     
     struct msghdr message;
     struct sockaddr_nl sa;
-    char *buffer;
+    char *buffer = NULL;
     struct iovec iov;
 
     struct {
@@ -8175,15 +8175,16 @@ ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
 	route_table->NumEntry = LIST_NUM(route_list);
 	route_table->Entry = ToArrayEx(route_list, true);
 	ReleaseList(route_list);
+	Free(buffer);
 
 	return route_table;
 
 FAIL:
-	ROUTE_TABLE *ret = ZeroMalloc(sizeof(ROUTE_TABLE));
-	ret->NumEntry = 0;
-	ret->Entry = ZeroMalloc(0);
+	route_table->NumEntry = 0;
+	route_table->Entry = ZeroMalloc(0);
 
-	return ret;
+	Free(buffer);
+	return route_table;
 }
 
 // Do Nothing
