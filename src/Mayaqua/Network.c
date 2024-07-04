@@ -8071,9 +8071,114 @@ void UnixSetSocketNonBlockingMode(int fd, bool nonblock)
 	}
 }
 
-// Do Nothing
-ROUTE_TABLE *UnixGetRouteTable()
+ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr * response) {
+
+}
+
+int UnixOpenNetlink()
 {
+
+    int sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+
+    if (sock < 0) {
+        perror("Failed to open netlink socket");
+        return -1;
+    }
+
+    return sock;
+}
+
+// Do Nothing
+ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
+{
+	ROUTE_TABLE *route_table = ZeroMallocFast(sizeof(ROUTE_TABLE));
+	UINT ret;
+	UINT num_retry = 0;
+	LIST *route_list;
+	UINT i;
+	ROUTE_ENTRY *e;
+
+	INT ret;
+    INT len;
+    
+    struct msghdr message;
+    struct sockaddr_nl sa;
+    char *buffer;
+    struct iovec iov;
+
+    struct {
+        struct nlmsghdr header;
+        struct rtmsg routemsg;
+    } nl_request;
+
+    // Header
+    nl_request.header.nlmsg_len = sizeof(nl_request);
+    nl_request.header.nlmsg_type = RTM_GETROUTE;
+    nl_request.header.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
+    nl_request.header.nlmsg_seq = time(NULL); // Increases over time
+
+    // Msg
+    nl_request.routemsg.rtm_family = family;
+
+    ret = send(sock, &nl_request, sizeof(nl_request), 0);
+
+    if (ret < 0) {
+        // Failed to send request
+        Debug("send failed")
+		goto FAIL;
+    }
+
+	memset(&message, 0, sizeof(message));
+    message.msg_name = &sa;
+    message.msg_namelen = sizeof(sa);
+    message.msg_iov = &iov;
+    message.msg_iovlen = 1;
+
+    message.msg_iov->iov_base = NULL;
+    message.msg_iov->iov_len = 0;
+    len = recvmsg(sock, &message, MSG_PEEK | MSG_TRUNC);
+	
+	if (len <= 0) {
+		Debug("recvmsg peek failed")
+		goto FAIL;
+    }
+
+    buffer = malloc(len);
+    if (!buffer) {
+        goto FAIL;
+    }
+
+    iov.iov_base = buffer;
+    iov.iov_len = len;
+
+    len = recvmsg(sock, &message, 0); // Response stored in buffer
+
+    if (len <= 0) {
+        Debug("recvmsg failed")
+		goto FAIL;
+    }
+
+    struct nlmsghdr *response_header = (struct nlmsghdr *) buffer;
+	route_list = NewListFast(CompareRouteEntryByMetric);
+    while (NLMSG_OK(response_header, len)) {
+        if (response_header->nlmsg_type != NLMSG_ERROR) {
+            ROUTE_ENTRY* entry = UnixNlResponseToRoute(response_header);
+			Add(route_list, entry);
+        }
+        response_header = NLMSG_NEXT(response_header, len);
+    }
+
+	// Sort by metric
+	Sort(route_list);
+
+	// Combine the results
+	route_table->NumEntry = LIST_NUM(route_list);
+	route_table->Entry = ToArrayEx(route_list, true);
+	ReleaseList(route_list);
+
+	return route_table;
+
+FAIL:
 	ROUTE_TABLE *ret = ZeroMalloc(sizeof(ROUTE_TABLE));
 	ret->NumEntry = 0;
 	ret->Entry = ZeroMalloc(0);
@@ -9442,7 +9547,7 @@ RETRY:
 	}
 
 	// Add to the list along
-	o = NewListFast(Win32CompareRouteEntryByMetric);
+	o = NewListFast(CompareRouteEntryByMetric);
 	for (i = 0; i < p->NumEntries; i++)
 	{
 		e = ZeroMallocFast(sizeof(ROUTE_ENTRY));
@@ -9471,7 +9576,7 @@ RETRY:
 }
 
 // Sort the routing entries by metric
-int Win32CompareRouteEntryByMetric(void *p1, void *p2)
+int CompareRouteEntryByMetric(void *p1, void *p2)
 {
 	ROUTE_ENTRY *e1, *e2;
 	// Validate arguments
