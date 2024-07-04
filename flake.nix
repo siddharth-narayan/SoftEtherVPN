@@ -18,7 +18,7 @@
         tree 
         cmake
         readline
-        ncurses 
+        ncurses
         zlib
       ];
 
@@ -54,6 +54,7 @@
         cmake
         gnumake
         libiconv
+        openssl
         readline
         ncurses
         pkg-config
