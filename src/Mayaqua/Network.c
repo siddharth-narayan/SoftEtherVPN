@@ -4,7 +4,7 @@
 
 // Network.c
 // Network communication module
-
+#define OS_UNIX 1
 #include "Network.h"
 
 #include "Cfg.h"
@@ -34,6 +34,7 @@
 
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <bits/socket.h>
 #include <sys/time.h>
 #endif
 
@@ -8071,7 +8072,84 @@ void UnixSetSocketNonBlockingMode(int fd, bool nonblock)
 	}
 }
 
+// Takes a Netlink response for a route request and returns a ROUTE_ENTRY*
 ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr * response) {
+	// Validate arguments
+	if (response == NULL) {
+		return NULL;
+	}
+
+	ROUTE_ENTRY *route_entry = ZeroMallocFast(sizeof(ROUTE_ENTRY));
+	struct rtmsg* route_message = NLMSG_DATA(response);
+    struct rtattr* route_attrs[RTA_MAX+1];
+	memset(route_attrs, 0, sizeof(struct rtattr *) * RTA_MAX + 1);
+    
+    int message_len_diff = response->nlmsg_len - NLMSG_LENGTH(sizeof(*route_message)); // Space taken up by attributes
+    if (message_len_diff < 0) {
+        Debug("Wrong message length");
+        return NULL;
+    }
+
+    struct rtattr *route_attribute = RTM_RTA(route_message);
+    while (RTA_OK(route_attribute, message_len_diff))
+    {
+        if(route_attribute->rta_type < RTA_MAX) {
+            route_attrs[route_attribute->rta_type] = route_attribute;
+        }
+
+        route_attribute = RTA_NEXT(route_attribute, message_len_diff);
+    }
+    
+    if (route_attrs[RTA_DST]) {
+		if (route_message->family == AF_INET) {
+			UINTToIP(&(route_entry->DestIP->address), *(UINT *)RTA_DATA(route_attrs[RTA_DST]));
+		} else {
+			for (int i = 0; i < IPV6_SIZE; i++) {
+				route_entry->DestIP->address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_DST]))[i];
+			}
+		}
+    }
+
+	if (route_attrs[RTA_PREFSRC]) {
+		if (route_message->family == AF_INET) {
+			UINTToIP(&(route_entry->DestMask->address), *(UINT *)RTA_DATA(route_attrs[RTA_PREFSRC]));
+		} else {
+			for (int i = 0; i < IPV6_SIZE; i++) {
+				route_entry->DestMask->address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_PREFSRC]))[i];
+			}
+		}
+    }
+
+    if (route_attrs[RTA_GATEWAY]) {
+		if (route_message->family == AF_INET) {
+			UINTToIP(&(route_entry->GatewayIP->address), *(UINT *)RTA_DATA(route_attrs[RTA_GATEWAY]));
+		} else {
+			for (int i = 0; i < IPV6_SIZE; i++) {
+				route_entry->GatewayIP->address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_GATEWAY]))[i];
+			}
+		}
+		if (IsZeroIP(&route_entry->GatewayIP))
+		{
+			route_entry->LocalRouting = true;
+		}
+		else
+		{
+			route_entry->LocalRouting = false;
+		}
+	}
+
+	if (route_attrs[RTA_METRICS]) {
+		route_entry->Metric = *(UINT *)RTA_DATA(route_attrs[RTA_GATEWAY]); // Unix seems to have only one metric
+		route_entry->IfMetric = *(UINT *)RTA_DATA(route_attrs[RTA_GATEWAY]);
+	}
+
+    if (route_attrs[RTA_OIF]) {
+        route_entry = *(UINT *)RTA_DATA(route_attrs[RTA_OIF]);
+    }
+
+	route_entry->Active = true;
+
+    printf("\n");
 
 }
 
@@ -8091,6 +8169,11 @@ int UnixOpenNetlink()
 // Do Nothing
 ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
 {
+	// Validate argument
+	if (family != AF_INET || family != AF_INET6 || family != AF_UNSPEC) {
+		goto FAIL;
+	}
+
 	ROUTE_TABLE *route_table = ZeroMallocFast(sizeof(ROUTE_TABLE));
 	UINT ret;
 	UINT num_retry = 0;
@@ -8163,7 +8246,9 @@ ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
     while (NLMSG_OK(response_header, len)) {
         if (response_header->nlmsg_type != NLMSG_ERROR) {
             ROUTE_ENTRY* entry = UnixNlResponseToRoute(response_header);
-			Add(route_list, entry);
+			if (entry != NULL) {
+				Add(route_list, entry);
+			}
         }
         response_header = NLMSG_NEXT(response_header, len);
     }
@@ -10656,7 +10741,7 @@ ROUTE_TABLE *GetRouteTable()
 #ifdef	OS_WIN32
 	t = Win32GetRouteTable2(true, true);
 #else	//OS_WIN32
-	t = UnixGetRouteTable();
+	t = UnixGetRouteTable(AF_UNSPEC);
 #endif	// OS_WIN32
 
 	WriteBuf(buf, &t->NumEntry, sizeof(t->NumEntry));

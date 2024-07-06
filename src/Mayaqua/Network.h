@@ -99,6 +99,7 @@ struct IP
 // Pointer to the beginning of the IPv4 address
 #define	IPV4(address)				(&address[12])
 #define	IPV4_SIZE					(4)
+#define IPV6_SIZE					(16)
 
 #define	CmpIpAddr(ip1, ip2)			(Cmp((ip1)->address, (ip2)->address, sizeof((ip1)->address)))
 
