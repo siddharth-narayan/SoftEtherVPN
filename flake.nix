@@ -61,6 +61,23 @@
         libsodium
         zlib
         # Change this to change what openssl version is built
+        #self.packages.x86_64-linux.default
+      ];
+    };
+    devShells.x86_64-linux.with-package = pkgs.mkShell {
+      packages = with pkgs; [
+        libgcc
+        libcxx
+        cmake
+        gnumake
+        libiconv
+        openssl
+        readline
+        ncurses
+        pkg-config
+        libsodium
+        zlib
+        # Change this to change what openssl version is built
         self.packages.x86_64-linux.default
       ];
     };
