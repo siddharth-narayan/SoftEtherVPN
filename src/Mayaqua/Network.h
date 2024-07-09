@@ -17,6 +17,7 @@
 #include <netinet/in.h>
 
 #ifdef UNIX_LINUX
+#include <linux/netlink.h>
 #include <pthread.h>
 #endif
 
@@ -1028,7 +1029,6 @@ void Win32JoinSockToSockEvent(SOCK *sock, SOCK_EVENT *event);
 void Win32FreeAsyncSocket(SOCK *sock);
 void Win32IpForwardRow2ToRouteEntry(ROUTE_ENTRY *entry, void *ip_forward_row);
 void Win32RouteEntryToIpForwardRow2(void *ip_forward_row, ROUTE_ENTRY *entry);
-int Win32CompareRouteEntryByMetric(void *p1, void *p2);
 ROUTE_TABLE *Win32GetRouteTable2(bool ipv4, bool ipv6);
 bool Win32AddRouteEntry2(ROUTE_ENTRY *e, bool *already_exists);
 void Win32DeleteRouteEntry2(ROUTE_ENTRY *e);
@@ -1071,7 +1071,9 @@ void UnixSelect(SOCKSET *set, UINT timeout, CANCEL *c1, CANCEL *c2);
 void UnixInitAsyncSocket(SOCK *sock);
 void UnixJoinSockToSockEvent(SOCK *sock, SOCK_EVENT *event);
 void UnixFreeAsyncSocket(SOCK *sock);
-ROUTE_TABLE *UnixGetRouteTable();
+ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr *);
+int UnixOpenNetlink();
+ROUTE_TABLE *UnixGetRouteTable(char family);
 bool UnixAddRouteEntry(ROUTE_ENTRY *e, bool *already_exists);
 void UnixDeleteRouteEntry(ROUTE_ENTRY *e);
 UINT UnixGetVLanInterfaceID(char *instance_name);
@@ -1125,6 +1127,7 @@ SOCK *ConnectEx3(char *hostname, UINT port, UINT timeout, bool *cancel_flag, cha
 SOCK *ConnectEx4(char *hostname, UINT port, UINT timeout, bool *cancel_flag, char *nat_t_svc_name, UINT *nat_t_error_code, bool try_start_ssl, bool no_get_hostname, IP *ret_ip);
 SOCK *ConnectEx5(char *hostname, UINT port, UINT timeout, bool *cancel_flag, char *nat_t_svc_name, UINT *nat_t_error_code, bool try_start_ssl, bool no_get_hostname, SSL_VERIFY_OPTION *ssl_option, UINT *ssl_err, char *hint_str, IP *ret_ip);
 SOCKET ConnectTimeoutIPv4(IP *ip, UINT port, UINT timeout, bool *cancel_flag);
+int CompareRouteEntryByMetric(void *p1, void *p2);
 
 // New function named with prefix "Bind" binds outgoing connection to a specific address. New one is wrapped in original one.
 #define	BIND_LOCALIP_NULL			NULL		// NULL IP address specifies no binding

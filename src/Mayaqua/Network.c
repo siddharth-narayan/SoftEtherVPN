@@ -42,6 +42,16 @@
 #include <sys/event.h>
 #endif
 
+#ifdef	UNIX_LINUX
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+#include <time.h>
+#include <stdio.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#endif
+
 #ifdef UNIX
 #ifdef UNIX_SOLARIS
 #define USE_STATVFS
@@ -8073,17 +8083,20 @@ void UnixSetSocketNonBlockingMode(int fd, bool nonblock)
 }
 
 // Takes a Netlink response for a route request and returns a ROUTE_ENTRY*
-ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr * response) {
+ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr *response) {
 	// Validate arguments
 	if (response == NULL) {
+		Debug("argument was null");
 		return NULL;
 	}
 
 	ROUTE_ENTRY *route_entry = ZeroMallocFast(sizeof(ROUTE_ENTRY));
+	if (!route_entry) {
+		Debug("Alloc failed for route entry");
+	}
 	struct rtmsg* route_message = NLMSG_DATA(response);
     struct rtattr* route_attrs[RTA_MAX+1];
 	memset(route_attrs, 0, sizeof(struct rtattr *) * RTA_MAX + 1);
-    
     int message_len_diff = response->nlmsg_len - NLMSG_LENGTH(sizeof(*route_message)); // Space taken up by attributes
     if (message_len_diff < 0) {
         Debug("Wrong message length");
@@ -8101,31 +8114,31 @@ ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr * response) {
     }
     
     if (route_attrs[RTA_DST]) {
-		if (route_message->family == AF_INET) {
-			UINTToIP(&(route_entry->DestIP->address), *(UINT *)RTA_DATA(route_attrs[RTA_DST]));
+		if (route_message->rtm_family == AF_INET) {
+			UINTToIP(&(route_entry->DestIP.address), *(UINT *)RTA_DATA(route_attrs[RTA_DST]));
 		} else {
 			for (int i = 0; i < IPV6_SIZE; i++) {
-				route_entry->DestIP->address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_DST]))[i];
+				route_entry->DestIP.address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_DST]))[i];
 			}
 		}
     }
 
 	if (route_attrs[RTA_PREFSRC]) {
-		if (route_message->family == AF_INET) {
-			UINTToIP(&(route_entry->DestMask->address), *(UINT *)RTA_DATA(route_attrs[RTA_PREFSRC]));
+		if (route_message->rtm_family == AF_INET) {
+			UINTToIP(&(route_entry->DestMask.address), *(UINT *)RTA_DATA(route_attrs[RTA_PREFSRC]));
 		} else {
 			for (int i = 0; i < IPV6_SIZE; i++) {
-				route_entry->DestMask->address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_PREFSRC]))[i];
+				route_entry->DestMask.address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_PREFSRC]))[i];
 			}
 		}
     }
 
     if (route_attrs[RTA_GATEWAY]) {
-		if (route_message->family == AF_INET) {
-			UINTToIP(&(route_entry->GatewayIP->address), *(UINT *)RTA_DATA(route_attrs[RTA_GATEWAY]));
+		if (route_message->rtm_family == AF_INET) {
+			UINTToIP(&(route_entry->GatewayIP.address), *(UINT *)RTA_DATA(route_attrs[RTA_GATEWAY]));
 		} else {
 			for (int i = 0; i < IPV6_SIZE; i++) {
-				route_entry->GatewayIP->address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_GATEWAY]))[i];
+				route_entry->GatewayIP.address[i] = ((BYTE *)RTA_DATA(route_attrs[RTA_GATEWAY]))[i];
 			}
 		}
 		if (IsZeroIP(&route_entry->GatewayIP))
@@ -8144,19 +8157,17 @@ ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr * response) {
 	}
 
     if (route_attrs[RTA_OIF]) {
-        route_entry = *(UINT *)RTA_DATA(route_attrs[RTA_OIF]);
+        route_entry->InterfaceID = *(UINT *)RTA_DATA(route_attrs[RTA_OIF]);
     }
-
 	route_entry->Active = true;
 
-    printf("\n");
-
+	return route_entry;
 }
 
-int UnixOpenNetlink()
+INT UnixOpenNetlink()
 {
 
-    int sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    INT sock = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 
     if (sock < 0) {
         perror("Failed to open netlink socket");
@@ -8167,15 +8178,10 @@ int UnixOpenNetlink()
 }
 
 // Do Nothing
-ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
+ROUTE_TABLE *UnixGetRouteTable(char family)
 {
-	// Validate argument
-	if (family != AF_INET || family != AF_INET6 || family != AF_UNSPEC) {
-		goto FAIL;
-	}
-
+	INT sock = UnixOpenNetlink();
 	ROUTE_TABLE *route_table = ZeroMallocFast(sizeof(ROUTE_TABLE));
-	UINT ret;
 	UINT num_retry = 0;
 	LIST *route_list;
 	UINT i;
@@ -8188,6 +8194,11 @@ ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
     struct sockaddr_nl sa;
     char *buffer = NULL;
     struct iovec iov;
+
+	// Validate argument
+	if (family != AF_INET && family != AF_INET6 && family != AF_UNSPEC) {
+		goto FAIL;
+	}
 
     struct {
         struct nlmsghdr header;
@@ -8207,7 +8218,7 @@ ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
 
     if (ret < 0) {
         // Failed to send request
-        Debug("send failed")
+        Debug("send failed");
 		goto FAIL;
     }
 
@@ -8222,11 +8233,11 @@ ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
     len = recvmsg(sock, &message, MSG_PEEK | MSG_TRUNC);
 	
 	if (len <= 0) {
-		Debug("recvmsg peek failed")
+		Debug("recvmsg peek failed");
 		goto FAIL;
     }
 
-    buffer = malloc(len);
+    buffer = Malloc(len);
     if (!buffer) {
         goto FAIL;
     }
@@ -8237,7 +8248,7 @@ ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
     len = recvmsg(sock, &message, 0); // Response stored in buffer
 
     if (len <= 0) {
-        Debug("recvmsg failed")
+        Debug("recvmsg failed");
 		goto FAIL;
     }
 
@@ -8246,7 +8257,7 @@ ROUTE_TABLE *UnixGetRouteTable(unsigned char family)
     while (NLMSG_OK(response_header, len)) {
         if (response_header->nlmsg_type != NLMSG_ERROR) {
             ROUTE_ENTRY* entry = UnixNlResponseToRoute(response_header);
-			if (entry != NULL) {
+			if (entry != NULL) {				
 				Add(route_list, entry);
 			}
         }
@@ -8273,9 +8284,103 @@ FAIL:
 }
 
 // Do Nothing
-bool UnixAddRouteEntry(ROUTE_ENTRY *e, bool *already_exists)
+bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 {
-	return true;
+	INT sock = UnixOpenNetlink();
+	INT ret;
+    INT len;
+    
+    struct msghdr message;
+    struct sockaddr_nl sa;
+    char *buffer = NULL;
+    struct iovec iov;
+
+	// Validate argument
+	if (family != AF_INET && family != AF_INET6 && family != AF_UNSPEC) {
+		goto FAIL;
+	}
+
+    struct {
+        struct nlmsghdr header;
+        struct rtmsg routemsg;
+    } nl_request;
+
+    // Header
+    nl_request.header.nlmsg_len = sizeof(nl_request);
+    nl_request.header.nlmsg_type = RTM_NEWROUTE;
+    nl_request.header.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+    nl_request.header.nlmsg_seq = time(NULL); // Increases over time
+
+    // Msg
+    nl_request.routemsg.rtm_family =  AF_UNSPEC;
+
+    ret = send(sock, &nl_request, sizeof(nl_request), 0);
+
+    if (ret < 0) {
+        // Failed to send request
+        Debug("send failed");
+		return false;
+    }
+
+	memset(&message, 0, sizeof(message));
+    message.msg_name = &sa;
+    message.msg_namelen = sizeof(sa);
+    message.msg_iov = &iov;
+    message.msg_iovlen = 1;
+
+    message.msg_iov->iov_base = NULL;
+    message.msg_iov->iov_len = 0;
+    len = recvmsg(sock, &message, MSG_PEEK | MSG_TRUNC);
+	
+	if (len <= 0) {
+		Debug("recvmsg peek failed");
+		return false;
+    }
+
+    buffer = Malloc(len);
+    if (!buffer) {
+        return false;
+    }
+
+    iov.iov_base = buffer;
+    iov.iov_len = len;
+
+    len = recvmsg(sock, &message, 0); // Response stored in buffer
+
+    if (len <= 0) {
+        Debug("recvmsg failed");
+		return false;
+    }
+
+    struct nlmsghdr *response_header = (struct nlmsghdr *) buffer;
+	route_list = NewListFast(CompareRouteEntryByMetric);
+    while (NLMSG_OK(response_header, len)) {
+        if (response_header->nlmsg_type != NLMSG_ERROR) {
+            ROUTE_ENTRY* entry = UnixNlResponseToRoute(response_header);
+			if (entry != NULL) {				
+				Add(route_list, entry);
+			}
+        }
+        response_header = NLMSG_NEXT(response_header, len);
+    }
+
+	// Sort by metric
+	Sort(route_list);
+
+	// Combine the results
+	route_table->NumEntry = LIST_NUM(route_list);
+	route_table->Entry = ToArrayEx(route_list, true);
+	ReleaseList(route_list);
+	Free(buffer);
+
+	return route_table;
+
+FAIL:
+	route_table->NumEntry = 0;
+	route_table->Entry = ZeroMalloc(0);
+
+	Free(buffer);
+	return route_table;
 }
 
 // Do Nothing
@@ -9661,37 +9766,6 @@ RETRY:
 	return t;
 }
 
-// Sort the routing entries by metric
-int CompareRouteEntryByMetric(void *p1, void *p2)
-{
-	ROUTE_ENTRY *e1, *e2;
-	// Validate arguments
-	if (p1 == NULL || p2 == NULL)
-	{
-		return 0;
-	}
-
-	e1 = *(ROUTE_ENTRY **)p1;
-	e2 = *(ROUTE_ENTRY **)p2;
-	if (e1 == NULL || e2 == NULL)
-	{
-		return 0;
-	}
-
-	if (e1->Metric > e2->Metric)
-	{
-		return 1;
-	}
-	else if (e1->Metric == e2->Metric)
-	{
-		return 0;
-	}
-	else
-	{
-		return -1;
-	}
-}
-
 // Convert the ROUTE_ENTRY to a MIB_IPFORWARD_ROW2 (For Vista and later)
 void Win32RouteEntryToIpForwardRow2(void *ip_forward_row, ROUTE_ENTRY *entry)
 {
@@ -10778,6 +10852,37 @@ void FreeRouteTable(ROUTE_TABLE *t)
 	}
 	Free(t->Entry);
 	Free(t);
+}
+
+// Sort the routing entries by metric
+int CompareRouteEntryByMetric(void *p1, void *p2)
+{
+	ROUTE_ENTRY *e1, *e2;
+	// Validate arguments
+	if (p1 == NULL || p2 == NULL)
+	{
+		return 0;
+	}
+
+	e1 = *(ROUTE_ENTRY **)p1;
+	e2 = *(ROUTE_ENTRY **)p2;
+	if (e1 == NULL || e2 == NULL)
+	{
+		return 0;
+	}
+
+	if (e1->Metric > e2->Metric)
+	{
+		return 1;
+	}
+	else if (e1->Metric == e2->Metric)
+	{
+		return 0;
+	}
+	else
+	{
+		return -1;
+	}
 }
 
 // UDP receiving
