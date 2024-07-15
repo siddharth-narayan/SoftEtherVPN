@@ -8096,7 +8096,7 @@ ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr *response) {
 	}
 	struct rtmsg* route_message = NLMSG_DATA(response);
     struct rtattr* route_attrs[RTA_MAX+1];
-	memset(route_attrs, 0, sizeof(struct rtattr *) * RTA_MAX + 1);
+	Zero(route_attrs, sizeof(struct rtattr *) * RTA_MAX + 1);
     int message_len_diff = response->nlmsg_len - NLMSG_LENGTH(sizeof(*route_message)); // Space taken up by attributes
     if (message_len_diff < 0) {
         Debug("Wrong message length");
@@ -8152,8 +8152,8 @@ ROUTE_ENTRY *UnixNlResponseToRoute(struct nlmsghdr *response) {
 	}
 
 	if (route_attrs[RTA_METRICS]) {
-		route_entry->Metric = *(UINT *)RTA_DATA(route_attrs[RTA_GATEWAY]); // Unix seems to have only one metric
-		route_entry->IfMetric = *(UINT *)RTA_DATA(route_attrs[RTA_GATEWAY]);
+		route_entry->Metric = *(UINT *)RTA_DATA(route_attrs[RTA_METRICS]); // Unix seems to have only one metric
+		route_entry->IfMetric = *(UINT *)RTA_DATA(route_attrs[RTA_METRICS]);
 	}
 
     if (route_attrs[RTA_OIF]) {
@@ -8222,7 +8222,7 @@ ROUTE_TABLE *UnixGetRouteTable(char family)
 		goto FAIL;
     }
 
-	memset(&message, 0, sizeof(message));
+	Zero(&message, sizeof(message));
     message.msg_name = &sa;
     message.msg_namelen = sizeof(sa);
     message.msg_iov = &iov;
@@ -8286,35 +8286,45 @@ FAIL:
 // Do Nothing
 bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 {
-	INT sock = UnixOpenNetlink();
 	INT ret;
     INT len;
-    
-    struct msghdr message;
-    struct sockaddr_nl sa;
-    char *buffer = NULL;
-    struct iovec iov;
+	struct netlink_route_req request;
 
-	// Validate argument
-	if (family != AF_INET && family != AF_INET6 && family != AF_UNSPEC) {
-		goto FAIL;
-	}
-
-    struct {
-        struct nlmsghdr header;
-        struct rtmsg routemsg;
-    } nl_request;
-
+	INT sock = UnixOpenNetlink();
+	bool isIpv4 = IsIP4(entry);
+	
     // Header
-    nl_request.header.nlmsg_len = sizeof(nl_request);
-    nl_request.header.nlmsg_type = RTM_NEWROUTE;
-    nl_request.header.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
-    nl_request.header.nlmsg_seq = time(NULL); // Increases over time
+    request.header.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    request.header.nlmsg_type = RTM_NEWROUTE;
+    request.header.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+    request.header.nlmsg_seq = time(NULL); // Increases over time
 
     // Msg
-    nl_request.routemsg.rtm_family =  AF_UNSPEC;
+    //request.routemsg.rtm_family =  AF_UNSPEC;
+	request.routemsg.rtm_table = RT_TABLE_MAIN;
+	request.routemsg.rtm_type = RTN_UNICAST;
+	
+	if (isIpv4) {
+		request.routemsg.rtm_dst_len = 32;
 
-    ret = send(sock, &nl_request, sizeof(nl_request), 0);
+		// Add rtattr attributes to message
+		UnixAddAttr(&request, RTA_DST, IPToUINT(&entry->DestIP), IPV4_SIZE);
+		UnixAddAttr(&request, RTA_PREFSRC, IPToUINT(&entry->DestMask), IPV4_SIZE);
+		UnixAddAttr(&request, RTA_GATEWAY, IPToUINT(&entry->GatewayIP), IPV4_SIZE);
+		UnixAddAttr(&request, RTA_METRICS, &entry->Metric, sizeof(UINT));
+		UnixAddAttr(&request, RTA_OIF, &entry->InterfaceID, sizeof(UINT));
+	} else {
+		request.routemsg.rtm_dst_len = 128;
+
+		// Add rtattr attributes to message
+		UnixAddAttr(&request, RTA_DST, &entry->DestIP, IPV6_SIZE);
+		UnixAddAttr(&request, RTA_PREFSRC, &entry->DestMask, IPV6_SIZE);
+		UnixAddAttr(&request, RTA_GATEWAY, &entry->GatewayIP, IPV6_SIZE);
+		UnixAddAttr(&request, RTA_METRICS, &entry->Metric, sizeof(UINT));
+		UnixAddAttr(&request, RTA_OIF, &entry->InterfaceID, sizeof(UINT));
+	}
+	
+    ret = send(sock, &request, sizeof(request), 0);
 
     if (ret < 0) {
         // Failed to send request
@@ -8322,65 +8332,20 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 		return false;
     }
 
-	memset(&message, 0, sizeof(message));
-    message.msg_name = &sa;
-    message.msg_namelen = sizeof(sa);
-    message.msg_iov = &iov;
-    message.msg_iovlen = 1;
+	return true;
+}
 
-    message.msg_iov->iov_base = NULL;
-    message.msg_iov->iov_len = 0;
-    len = recvmsg(sock, &message, MSG_PEEK | MSG_TRUNC);
-	
-	if (len <= 0) {
-		Debug("recvmsg peek failed");
-		return false;
-    }
+void UnixAddAttr(struct netlink_route_req *request, int type, void *data, int data_len) {
+	struct rtattr *route_attr;
 
-    buffer = Malloc(len);
-    if (!buffer) {
-        return false;
-    }
+	route_attr = (struct rtattr *)(request + NLMSG_ALIGN(request->header.nlmsg_len));
+	route_attr->rta_type = type;
+	route_attr->rta_len = RTA_LENGTH(data_len);
 
-    iov.iov_base = buffer;
-    iov.iov_len = len;
+	Copy(RTA_DATA(route_attr), data, data_len);
 
-    len = recvmsg(sock, &message, 0); // Response stored in buffer
+	request->header.nlmsg_len = NLMSG_ALIGN(request->header.nlmsg_len) + RTA_LENGTH(data_len);
 
-    if (len <= 0) {
-        Debug("recvmsg failed");
-		return false;
-    }
-
-    struct nlmsghdr *response_header = (struct nlmsghdr *) buffer;
-	route_list = NewListFast(CompareRouteEntryByMetric);
-    while (NLMSG_OK(response_header, len)) {
-        if (response_header->nlmsg_type != NLMSG_ERROR) {
-            ROUTE_ENTRY* entry = UnixNlResponseToRoute(response_header);
-			if (entry != NULL) {				
-				Add(route_list, entry);
-			}
-        }
-        response_header = NLMSG_NEXT(response_header, len);
-    }
-
-	// Sort by metric
-	Sort(route_list);
-
-	// Combine the results
-	route_table->NumEntry = LIST_NUM(route_list);
-	route_table->Entry = ToArrayEx(route_list, true);
-	ReleaseList(route_list);
-	Free(buffer);
-
-	return route_table;
-
-FAIL:
-	route_table->NumEntry = 0;
-	route_table->Entry = ZeroMalloc(0);
-
-	Free(buffer);
-	return route_table;
 }
 
 // Do Nothing

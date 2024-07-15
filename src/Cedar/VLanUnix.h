@@ -21,12 +21,36 @@
 
 #ifndef	NO_VLAN
 
+// Routing tracking state machine
+struct ROUTE_TRACKING
+{
+	UINT VLanInterfaceId;
+	ROUTE_ENTRY *RouteToServer;
+	bool RouteToServerAlreadyExists;
+	ROUTE_ENTRY *DefaultGatewayByVLan;
+	ROUTE_ENTRY *VistaDefaultGateway1, *VistaDefaultGateway2, *VistaOldDefaultGatewayByVLan;
+	ROUTE_ENTRY *RouteToDefaultDns;
+	ROUTE_ENTRY *RouteToEight;
+	ROUTE_ENTRY *RouteToNatTServer;
+	ROUTE_ENTRY *RouteToRealServerGlobal;
+	UINT64 NextTrackingTime;
+	UINT64 NextTrackingTimeAdd;
+	UINT64 NextRouteChangeCheckTime;
+	UINT LastRoutingTableHash;
+	QUEUE *DeletedDefaultGateway;
+	UINT OldDefaultGatewayMetric;
+	IP OldDnsServer;
+	bool VistaAndUsingPPP;
+	ROUTE_CHANGE *RouteChange;
+};
+
 // VLAN structure
 struct VLAN
 {
 	volatile bool Halt;			// Halt flag
 	char *InstanceName;			// Instance name
 	int fd;						// File
+	ROUTE_TRACKING *RouteState;	// Routing tracking state machine
 };
 
 // Function prototype
@@ -72,6 +96,10 @@ void UnixVLanDelete(char *name);
 bool UnixVLanSetState(char* name, bool state_up);
 int UnixVLanGet(char *name);
 int UnixCompareVLan(void *p1, void *p2);
+
+void RouteTrackingStart(SESSION *s);
+void RouteTrackingStop(SESSION *s, ROUTE_TRACKING *t);
+void RouteTrackingMain(SESSION *s);
 
 #endif // VLANUNIX_H
 

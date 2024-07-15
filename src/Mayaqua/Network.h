@@ -18,7 +18,13 @@
 
 #ifdef UNIX_LINUX
 #include <linux/netlink.h>
+#include <linux/rtnetlink.h>
 #include <pthread.h>
+struct netlink_route_req {
+	struct nlmsghdr header;
+	struct rtmsg routemsg;
+	char atts[4096]; // Some space for attributes
+};
 #endif
 
 #ifdef UNIX_OPENBSD
