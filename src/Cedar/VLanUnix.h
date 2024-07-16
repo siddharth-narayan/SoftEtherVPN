@@ -15,6 +15,7 @@
 #include "VLan.h"
 
 #include "Mayaqua/MayaType.h"
+#include "Mayaqua/Network.h"
 
 // Constant
 #define	TAP_READ_BUF_SIZE			1600

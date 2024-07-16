@@ -11,6 +11,10 @@
 
 #include "Connection.h"
 #include "Session.h"
+#include "Admin.h"
+#include "UdpAccel.h"
+#include "Mayaqua/Object.h"
+#include "Mayaqua/Tick64.h"
 
 #include "Mayaqua/FileIO.h"
 #include "Mayaqua/Mayaqua.h"
@@ -534,7 +538,7 @@ void RouteTrackingMain(SESSION *s)
 	if (any_modified)
 	{
 		// Clear the DNS cache
-		Win32FlushDnsCache();
+		// Win32FlushDnsCache();
 	}
 }
 
@@ -565,12 +569,12 @@ void RouteTrackingStart(SESSION *s)
 	}
 
 	// Get the interface ID of the virtual LAN card
-	if_id = GetInstanceId(v->InstanceName);
-	Debug("[InstanceId of %s] = 0x%x\n", v->InstanceName, if_id);
+	// if_id = GetInstanceId(v->InstanceName);
+	// Debug("[InstanceId of %s] = 0x%x\n", v->InstanceName, if_id);
 
 	// The routing table by the virtual LAN card body should be
 	// excluded explicitly in Windows Vista
-	exclude_if_id = if_id;
+	// exclude_if_id = if_id;
 
 	// Get the route to the server
 	e = GetBestRouteEntryEx(&s->ServerIP, exclude_if_id);
@@ -704,30 +708,30 @@ void RouteTrackingStart(SESSION *s)
 
 	// Get as soon as releasing the IP address in the case of using DHCP
 	if (IsNt())
-	{
-		char tmp[MAX_SIZE];
-		MS_ADAPTER *a;
+	{	// TODO FIX THIS
+		// char tmp[MAX_SIZE];
+		// MS_ADAPTER *a;
 
-		Format(tmp, sizeof(tmp), VLAN_ADAPTER_NAME_TAG, v->InstanceName);
-		a = MsGetAdapter(tmp);
+		// Format(tmp, sizeof(tmp), VLAN_ADAPTER_NAME_TAG, v->InstanceName);
+		// a = MsGetAdapter(tmp);
 
-		if (a != NULL)
-		{
-			if (a->UseDhcp)
-			{
-				bool ret = Win32ReleaseAddressByGuidEx(a->Guid, 100);
-				Debug("*** Win32ReleaseAddressByGuidEx = %u\n", ret);
+		// if (a != NULL)
+		// {
+		// 	if (a->UseDhcp)
+		// 	{
+		// 		bool ret = Win32ReleaseAddressByGuidEx(a->Guid, 100);
+		// 		Debug("*** Win32ReleaseAddressByGuidEx = %u\n", ret);
 
-				ret = Win32RenewAddressByGuidEx(a->Guid, 100);
-				Debug("*** Win32RenewAddressByGuidEx = %u\n", ret);
-			}
+		// 		ret = Win32RenewAddressByGuidEx(a->Guid, 100);
+		// 		Debug("*** Win32RenewAddressByGuidEx = %u\n", ret);
+		// 	}
 
-			MsFreeAdapter(a);
-		}
+		// 	MsFreeAdapter(a);
+		// }
 	}
 
 	// Clear the DNS cache
-	Win32FlushDnsCache();
+	// Win32FlushDnsCache();
 
 	// Detect a change in the routing table (for only supported OS)
 	t->RouteChange = NewRouteChange();
@@ -767,7 +771,7 @@ void RouteTrackingStop(SESSION *s, ROUTE_TRACKING *t)
 	}
 
 	// Clear the DNS cache
-	Win32FlushDnsCache();
+	// Win32FlushDnsCache();
 
 	if (s->Cedar->Client != NULL && s->Account != NULL)
 	{
