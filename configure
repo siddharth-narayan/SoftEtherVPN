@@ -50,7 +50,7 @@ fi
 
 echo ""
 
-(cd build && cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ${CMAKE_FLAGS} .. || exit 1)
+(cd build && cmake -DCMAKE_BUILD_TYPE=Debug ${CMAKE_FLAGS} .. || exit 1)
 
 
 echo ""

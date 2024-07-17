@@ -8289,7 +8289,9 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 	INT ret;
     INT len;
 	struct netlink_route_req request;
-
+	char str[256];
+	Debug("Adding Route entry: %S", RouteToStr(&str, 256, entry));
+	
 	INT sock = UnixOpenNetlink();
 	bool isIpv4 = IsIP4(entry);
 	
@@ -8306,22 +8308,29 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 	
 	if (isIpv4) {
 		request.routemsg.rtm_dst_len = 32;
-
+		int temp;
+		
 		// Add rtattr attributes to message
-		UnixAddAttr(&request, RTA_DST, IPToUINT(&entry->DestIP), IPV4_SIZE);
-		UnixAddAttr(&request, RTA_PREFSRC, IPToUINT(&entry->DestMask), IPV4_SIZE);
-		UnixAddAttr(&request, RTA_GATEWAY, IPToUINT(&entry->GatewayIP), IPV4_SIZE);
-		UnixAddAttr(&request, RTA_METRICS, &entry->Metric, sizeof(UINT));
-		UnixAddAttr(&request, RTA_OIF, &entry->InterfaceID, sizeof(UINT));
+		temp = IPToUINT(&entry->DestIP);
+		UnixAddAttr(&request, RTA_DST, &temp, IPV4_SIZE);
+
+		temp = IPToUINT(&entry->DestMask);
+		UnixAddAttr(&request, RTA_PREFSRC, &temp, IPV4_SIZE);
+		
+		temp = IPToUINT(&entry->GatewayIP);
+		UnixAddAttr(&request, RTA_GATEWAY, &temp, IPV4_SIZE);
+		
+		UnixAddAttr(&request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
+		UnixAddAttr(&request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
 	} else {
 		request.routemsg.rtm_dst_len = 128;
 
 		// Add rtattr attributes to message
-		UnixAddAttr(&request, RTA_DST, &entry->DestIP, IPV6_SIZE);
-		UnixAddAttr(&request, RTA_PREFSRC, &entry->DestMask, IPV6_SIZE);
-		UnixAddAttr(&request, RTA_GATEWAY, &entry->GatewayIP, IPV6_SIZE);
-		UnixAddAttr(&request, RTA_METRICS, &entry->Metric, sizeof(UINT));
-		UnixAddAttr(&request, RTA_OIF, &entry->InterfaceID, sizeof(UINT));
+		UnixAddAttr(&request, RTA_DST, &(entry->DestIP), IPV6_SIZE);
+		UnixAddAttr(&request, RTA_PREFSRC, &(entry->DestMask), IPV6_SIZE);
+		UnixAddAttr(&request, RTA_GATEWAY, &(entry->GatewayIP), IPV6_SIZE);
+		UnixAddAttr(&request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
+		UnixAddAttr(&request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
 	}
 	
     ret = send(sock, &request, sizeof(request), 0);
@@ -8338,11 +8347,13 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 void UnixAddAttr(struct netlink_route_req *request, int type, void *data, int data_len) {
 	struct rtattr *route_attr;
 
-	route_attr = (struct rtattr *)(request + NLMSG_ALIGN(request->header.nlmsg_len));
+	Debug("NLMSG returns %i", NLMSG_ALIGN(request->header.nlmsg_len));
+	route_attr = (struct rtattr *)((void *)request + NLMSG_ALIGN(request->header.nlmsg_len));
 	route_attr->rta_type = type;
 	route_attr->rta_len = RTA_LENGTH(data_len);
-
-	Copy(RTA_DATA(route_attr), data, data_len);
+	void *route_attr_data = RTA_DATA(route_attr);
+	Debug("ROUTE ATTR data ptr %p", route_attr_data);
+	Copy(route_attr_data, data, data_len);
 
 	request->header.nlmsg_len = NLMSG_ALIGN(request->header.nlmsg_len) + RTA_LENGTH(data_len);
 
