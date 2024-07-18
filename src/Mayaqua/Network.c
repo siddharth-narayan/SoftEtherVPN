@@ -8288,52 +8288,59 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 {
 	INT ret;
     INT len;
-	struct netlink_route_req request;
-	char str[256];
-	Debug("Adding Route entry: %S", RouteToStr(&str, 256, entry));
+	struct netlink_route_req *request;
+	char *str = ZeroMalloc(256);
+
+	RouteToStr(str, 256, entry);
+	Debug("Adding Route entry: %s", str);
 	
+	Free(str);
+
 	INT sock = UnixOpenNetlink();
 	bool isIpv4 = IsIP4(entry);
 	
     // Header
-    request.header.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
-    request.header.nlmsg_type = RTM_NEWROUTE;
-    request.header.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
-    request.header.nlmsg_seq = time(NULL); // Increases over time
+	request = ZeroMalloc(sizeof(struct netlink_route_req));
+    request->header.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    request->header.nlmsg_type = RTM_NEWROUTE;
+    request->header.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+    request->header.nlmsg_seq = time(NULL); // Increases over time
 
     // Msg
     //request.routemsg.rtm_family =  AF_UNSPEC;
-	request.routemsg.rtm_table = RT_TABLE_MAIN;
-	request.routemsg.rtm_type = RTN_UNICAST;
+	request->routemsg.rtm_table = RT_TABLE_MAIN;
+	request->routemsg.rtm_type = RTN_UNICAST;
 	
 	if (isIpv4) {
-		request.routemsg.rtm_dst_len = 32;
+		request->routemsg.rtm_dst_len = 32;
 		int temp;
 		
 		// Add rtattr attributes to message
 		temp = IPToUINT(&entry->DestIP);
-		UnixAddAttr(&request, RTA_DST, &temp, IPV4_SIZE);
+		UnixAddAttr(request, RTA_DST, &temp, IPV4_SIZE);
 
 		temp = IPToUINT(&entry->DestMask);
-		UnixAddAttr(&request, RTA_PREFSRC, &temp, IPV4_SIZE);
+		UnixAddAttr(request, RTA_PREFSRC, &temp, IPV4_SIZE);
 		
 		temp = IPToUINT(&entry->GatewayIP);
-		UnixAddAttr(&request, RTA_GATEWAY, &temp, IPV4_SIZE);
+		UnixAddAttr(request, RTA_GATEWAY, &temp, IPV4_SIZE);
 		
-		UnixAddAttr(&request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
-		UnixAddAttr(&request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
+		UnixAddAttr(request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
+		UnixAddAttr(request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
 	} else {
-		request.routemsg.rtm_dst_len = 128;
+		request->routemsg.rtm_dst_len = 128;
 
 		// Add rtattr attributes to message
-		UnixAddAttr(&request, RTA_DST, &(entry->DestIP), IPV6_SIZE);
-		UnixAddAttr(&request, RTA_PREFSRC, &(entry->DestMask), IPV6_SIZE);
-		UnixAddAttr(&request, RTA_GATEWAY, &(entry->GatewayIP), IPV6_SIZE);
-		UnixAddAttr(&request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
-		UnixAddAttr(&request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
+		UnixAddAttr(request, RTA_DST, &(entry->DestIP), IPV6_SIZE);
+		UnixAddAttr(request, RTA_PREFSRC, &(entry->DestMask), IPV6_SIZE);
+		UnixAddAttr(request, RTA_GATEWAY, &(entry->GatewayIP), IPV6_SIZE);
+		UnixAddAttr(request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
+		UnixAddAttr(request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
 	}
 	
-    ret = send(sock, &request, sizeof(request), 0);
+    ret = send(sock, request, sizeof(request), 0);
+
+	Free(request);
 
     if (ret < 0) {
         // Failed to send request
