@@ -23,7 +23,7 @@
 struct netlink_route_req {
 	struct nlmsghdr header;
 	struct rtmsg routemsg;
-	char atts[4096]; // Some space for attributes
+	char attrs[512]; // Reasonable amount of space for attributes
 };
 #endif
 

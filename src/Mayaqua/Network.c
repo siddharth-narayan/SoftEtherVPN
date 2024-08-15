@@ -8289,11 +8289,10 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 	INT ret;
     INT len;
 	struct netlink_route_req *request;
-	char *str = ZeroMalloc(256);
 
+	char *str = ZeroMalloc(256);
 	RouteToStr(str, 256, entry);
 	Debug("Adding Route entry: %s", str);
-	
 	Free(str);
 
 	INT sock = UnixOpenNetlink();
@@ -8302,29 +8301,37 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
     // Header
 	request = ZeroMalloc(sizeof(struct netlink_route_req));
     request->header.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
-    request->header.nlmsg_type = RTM_NEWROUTE;
-    request->header.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL;
+    request->header.nlmsg_type = RTM_NEWROUTE; // (24)
+    request->header.nlmsg_flags = NLM_F_REQUEST | NLM_F_CREATE | NLM_F_EXCL; // (1537)
     request->header.nlmsg_seq = time(NULL); // Increases over time
+	// nlmsg_pid = 0;
+    
+	// Msg
+    request->routemsg.rtm_family = AF_INET; // (2)
+    // request->routemsg.rtm_dst_len (set in following if block)
+    // request->routemsg.rtm_src_len = 0;
+    // rtm_tos = 0;
+	request->routemsg.rtm_table = RT_TABLE_MAIN; // (254)
+    request->routemsg.rtm_protocol = RTPROT_BOOT; // (3)
+    request->routemsg.rtm_scope = RT_SCOPE_LINK; // (253)
+	request->routemsg.rtm_type = RTN_UNICAST; // (1)
+    // request->routemsg.rtm_flags = 0;
 
-    // Msg
-    //request.routemsg.rtm_family =  AF_UNSPEC;
-	request->routemsg.rtm_table = RT_TABLE_MAIN;
-	request->routemsg.rtm_type = RTN_UNICAST;
-	
 	if (isIpv4) {
 		request->routemsg.rtm_dst_len = 32;
-		int temp;
-		
+
 		// Add rtattr attributes to message
+		int temp;
+
 		temp = IPToUINT(&entry->DestIP);
 		UnixAddAttr(request, RTA_DST, &temp, IPV4_SIZE);
 
 		temp = IPToUINT(&entry->DestMask);
 		UnixAddAttr(request, RTA_PREFSRC, &temp, IPV4_SIZE);
-		
+
 		temp = IPToUINT(&entry->GatewayIP);
 		UnixAddAttr(request, RTA_GATEWAY, &temp, IPV4_SIZE);
-		
+
 		UnixAddAttr(request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
 		UnixAddAttr(request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
 	} else {
@@ -8338,13 +8345,13 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 		UnixAddAttr(request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
 	}
 	
-    ret = send(sock, request, sizeof(request), 0);
+    ret = send(sock, request, sizeof(struct netlink_route_req), 0);
 
 	Free(request);
 
     if (ret < 0) {
         // Failed to send request
-        Debug("send failed");
+        Debug("send failed\n");
 		return false;
     }
 
@@ -8354,21 +8361,91 @@ bool UnixAddRouteEntry(ROUTE_ENTRY *entry, bool *already_exists)
 void UnixAddAttr(struct netlink_route_req *request, int type, void *data, int data_len) {
 	struct rtattr *route_attr;
 
-	Debug("NLMSG returns %i", NLMSG_ALIGN(request->header.nlmsg_len));
-	route_attr = (struct rtattr *)((void *)request + NLMSG_ALIGN(request->header.nlmsg_len));
+	Debug("NLMSG returns %i\n", NLMSG_ALIGN(request->header.nlmsg_len));
+	route_attr = (struct rtattr *)((void *)request + NLMSG_ALIGN(request->header.nlmsg_len)); // Create a new rtattr at the end of nlmsg
 	route_attr->rta_type = type;
 	route_attr->rta_len = RTA_LENGTH(data_len);
-	void *route_attr_data = RTA_DATA(route_attr);
+
+	void *route_attr_data = RTA_DATA(route_attr); // Pointer to where to put data
 	Debug("ROUTE ATTR data ptr %p", route_attr_data);
 	Copy(route_attr_data, data, data_len);
 
-	request->header.nlmsg_len = NLMSG_ALIGN(request->header.nlmsg_len) + RTA_LENGTH(data_len);
+	request->header.nlmsg_len = NLMSG_ALIGN(request->header.nlmsg_len) + RTA_LENGTH(data_len); // Extend nlmsg length to include new rtattr + data 
 
 }
 
 // Do Nothing
-void UnixDeleteRouteEntry(ROUTE_ENTRY *e)
+void UnixDeleteRouteEntry(ROUTE_ENTRY *entry)
 {
+	INT ret;
+    INT len;
+	struct netlink_route_req *request;
+
+	char *str = ZeroMalloc(256);
+	RouteToStr(str, 256, entry);
+	Debug("DELETING Route entry: %s", str);
+	Free(str);
+
+	INT sock = UnixOpenNetlink();
+	bool isIpv4 = IsIP4(entry);
+	
+    // Header
+	request = ZeroMalloc(sizeof(struct netlink_route_req));
+    request->header.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    request->header.nlmsg_type = RTM_DELROUTE; // (24)
+    request->header.nlmsg_flags = NLM_F_REQUEST; // (1537)
+    request->header.nlmsg_seq = time(NULL); // Increases over time
+	// nlmsg_pid = 0;
+    
+	// Msg
+    request->routemsg.rtm_family = AF_INET; // (2)
+    // request->routemsg.rtm_dst_len (set in following if block)
+    // request->routemsg.rtm_src_len = 0;
+    // rtm_tos = 0;
+	request->routemsg.rtm_table = RT_TABLE_MAIN; // (254)
+    request->routemsg.rtm_protocol = RTPROT_BOOT; // (3)
+    request->routemsg.rtm_scope = RT_SCOPE_LINK; // (253)
+	request->routemsg.rtm_type = RTN_UNICAST; // (1)
+    // request->routemsg.rtm_flags = 0;
+
+	if (isIpv4) {
+		request->routemsg.rtm_dst_len = 32;
+
+		// Add rtattr attributes to message
+		int temp;
+
+		temp = IPToUINT(&entry->DestIP);
+		UnixAddAttr(request, RTA_DST, &temp, IPV4_SIZE);
+
+		temp = IPToUINT(&entry->DestMask);
+		UnixAddAttr(request, RTA_PREFSRC, &temp, IPV4_SIZE);
+
+		temp = IPToUINT(&entry->GatewayIP);
+		UnixAddAttr(request, RTA_GATEWAY, &temp, IPV4_SIZE);
+
+		UnixAddAttr(request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
+		UnixAddAttr(request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
+	} else {
+		request->routemsg.rtm_dst_len = 128;
+
+		// Add rtattr attributes to message
+		UnixAddAttr(request, RTA_DST, &(entry->DestIP), IPV6_SIZE);
+		UnixAddAttr(request, RTA_PREFSRC, &(entry->DestMask), IPV6_SIZE);
+		UnixAddAttr(request, RTA_GATEWAY, &(entry->GatewayIP), IPV6_SIZE);
+		UnixAddAttr(request, RTA_METRICS, &(entry->Metric), sizeof(UINT));
+		UnixAddAttr(request, RTA_OIF, &(entry->InterfaceID), sizeof(UINT));
+	}
+	
+    ret = send(sock, request, sizeof(struct netlink_route_req), 0);
+
+	Free(request);
+
+    if (ret < 0) {
+        // Failed to send request
+        Debug("send failed\n");
+		return;
+    }
+
 	return;
 }
 
