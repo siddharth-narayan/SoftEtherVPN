@@ -20,7 +20,9 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
+#ifndef OPENSSL_NO_ENGINE
 #include <openssl/engine.h>
+#endif
 #include <openssl/bio.h>
 #include <openssl/x509.h>
 #include <openssl/pkcs7.h>
@@ -349,6 +351,11 @@ MD *NewMdEx(char *name, bool hmac)
 #else
 		m->Ctx = EVP_MD_CTX_create();
 #endif
+		if (m->Ctx == NULL)
+		{
+			return NULL;
+		}
+
 		if (EVP_DigestInit_ex(m->Ctx, m->Md, NULL) == false)
 		{
 			Debug("NewMdEx(): EVP_DigestInit_ex() failed with error: %s\n", OpenSSL_Error());
@@ -4602,6 +4609,11 @@ DH_CTX *DhNew(char *prime, UINT g)
 	dh = ZeroMalloc(sizeof(DH_CTX));
 
 	dh->dh = DH_new();
+	if (dh->dh == NULL)
+	{
+		return NULL;
+	}
+	
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
 	dhp = BinToBigNum(buf->Buf, buf->Size);
 	dhg = BN_new();
