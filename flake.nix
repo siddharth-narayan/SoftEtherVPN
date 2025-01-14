@@ -22,9 +22,14 @@
         zlib
       ];
 
+      nativeBuildInputs = [
+        pkgs.makeWrapper
+      ];
+
       preConfigure = ''
+          ls
           mkdir -p $out/
-          CMAKE_FLAGS="-DSE_PIDDIR=/tmp/softether -DSE_LOGDIR=/tmp/log/softether -DSE_DBDIR=/tmp/lib/softether" ./configure
+          CMAKE_FLAGS="-DSE_PIDDIR=/var/lib/softether -DSE_LOGDIR=/var/log/softether -DSE_DBDIR=/var/lib/softether" ./configure
       '';
       
       postInstall = ''
@@ -33,6 +38,10 @@
           sed 's|//|/|g' $out/lib/pkgconfig/liboqs.pc > $out/lib/pkgconfig/liboqs.pc.tmp
           cp $out/lib/pkgconfig/liboqs.pc.tmp $out/lib/pkgconfig/liboqs.pc
         fi
+
+        for f in vpncmd vpnclient vpnserver vpnbridge; do
+          wrapProgram $out/bin/$f --run "mkdir -p /var/lib/softether /var/log/softether"
+        done
       '';
 
       meta = with pkgs.lib; {
