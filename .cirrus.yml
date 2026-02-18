@@ -4,19 +4,19 @@ FreeBSD_task:
       SSL: openssl
       OPENSSL_ROOT_DIR: /usr/local
     env:
-      SSL: openssl32
+      SSL: openssl36
       OPENSSL_ROOT_DIR: /usr/local
     env:
       # base openssl
       SSL:
   matrix:
     freebsd_instance:
-      image_family: freebsd-14-0
+      image_family: freebsd-14-3
   prepare_script:
-    - pkg install -y pkgconf cmake git libsodium $SSL
+    - pkg install -y pkgconf cmake git libsodium cpu_features $SSL
     - git submodule update --init --recursive
   configure_script:
-    - ./configure
+    - CMAKE_FLAGS="-DUSE_SYSTEM_CPU_FEATURES=1" CFLAGS="-I/usr/local/include/cpu_features" ./configure
   build_script:
     - make -j $(sysctl -n hw.ncpu || echo 4) -C build
   test_script:

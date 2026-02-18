@@ -30,6 +30,9 @@
 // Default flooding queue length
 #define	DEFAULT_FLOODING_QUEUE_LENGTH				(32 * 1024 * 1024)
 
+// Default DHCP Discover Timeout
+#define	DEFAULT_DHCP_DISCOVER_TIMEOUT				(5 * 1000)
+
 // SoftEther link control packet
 struct SE_LINK
 {
@@ -183,6 +186,7 @@ struct HUB_OPTION
 	bool UseHubNameAsDhcpUserClassOption;	// Add HubName to DHCP request as User-Class option
 	bool UseHubNameAsRadiusNasId;		// Add HubName to Radius request as NAS-Identifier attrioption
 	bool AllowEapMatchUserByCert;		// Allow matching EAP Identity with user certificate CNs
+	UINT DhcpDiscoverTimeoutMs;			// Timeout to wait for DHCP server response on DISCOVER request
 };
 
 // MAC table entry
@@ -337,6 +341,7 @@ struct HUB
 	char *RadiusServerName;				// Radius server name
 	UINT RadiusServerPort;				// Radius server port number
 	UINT RadiusRetryInterval;			// Radius retry interval
+	UINT RadiusRetryTimeout;			// Radius timeout, it will no longer retry
 	BUF *RadiusSecret;					// Radius shared key
 	char RadiusSuffixFilter[MAX_SIZE];	// Radius suffix filter
 	char RadiusRealm[MAX_SIZE];			// Radius realm (optional)
@@ -478,9 +483,11 @@ void GetAccessListStr(char *str, UINT size, ACCESS *a);
 void DeleteOldIpTableEntry(LIST *o);
 void SetRadiusServer(HUB *hub, char *name, UINT port, char *secret);
 void SetRadiusServerEx(HUB *hub, char *name, UINT port, char *secret, UINT interval);
+void SetRadiusServerEx2(HUB *hub, char *name, UINT port, char *secret, UINT interval, UINT timeout);
 bool GetRadiusServer(HUB *hub, char *name, UINT size, UINT *port, char *secret, UINT secret_size);
 bool GetRadiusServerEx(HUB *hub, char *name, UINT size, UINT *port, char *secret, UINT secret_size, UINT *interval);
-bool GetRadiusServerEx2(HUB *hub, char *name, UINT size, UINT *port, char *secret, UINT secret_size, UINT *interval, char *suffix_filter, UINT suffix_filter_size);
+bool GetRadiusServerEx2(HUB *hub, char *name, UINT size, UINT *port, char *secret, UINT secret_size, UINT *interval, UINT *timeout);
+bool GetRadiusServerEx3(HUB *hub, char *name, UINT size, UINT *port, char *secret, UINT secret_size, UINT *interval, UINT *timeout, char *suffix_filter, UINT suffix_filter_size);
 int CompareCert(void *p1, void *p2);
 void GetHubLogSetting(HUB *h, HUB_LOG *setting);
 void SetHubLogSetting(HUB *h, HUB_LOG *setting);

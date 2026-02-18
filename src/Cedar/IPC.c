@@ -493,12 +493,14 @@ IPC *NewIPC(CEDAR *cedar, char *client_name, char *postfix, char *hubname, char 
 	{
 		UINTToIP(&ipc->DefaultGateway, hub->Option->DefaultGateway);
 		UINTToIP(&ipc->SubnetMask, hub->Option->DefaultSubnet);
+		ipc->DhcpDiscoverTimeoutMs = hub->Option->DhcpDiscoverTimeoutMs;
 		GetBroadcastAddress4(&ipc->BroadcastAddress, &ipc->DefaultGateway, &ipc->SubnetMask);
 	}
 	else
 	{
 		ZeroIP4(&ipc->DefaultGateway);
 		ZeroIP4(&ipc->SubnetMask);
+		ipc->DhcpDiscoverTimeoutMs = DEFAULT_DHCP_DISCOVER_TIMEOUT;
 		ZeroIP4(&ipc->BroadcastAddress);
 	}
 
@@ -564,6 +566,9 @@ IPC *NewIPCBySock(CEDAR *cedar, SOCK *s, void *mac_address)
 
 	ipc->Sock = s;
 	AddRef(s->ref);
+
+	// Initialize to pass the validity check on the source IP address performed by IPCSendIPv4()
+	ZeroIP4(&ipc->ClientIPAddress);
 
 	Copy(ipc->MacAddress, mac_address, 6);
 
@@ -793,7 +798,8 @@ bool IPCDhcpAllocateIP(IPC *ipc, DHCP_OPTION_LIST *opt, TUBE *discon_poll_tube)
 	StrCpy(req.Hostname, sizeof(req.Hostname), ipc->ClientHostname);
 	IPCDhcpSetConditionalUserClass(ipc, &req);
 
-	d = IPCSendDhcpRequest(ipc, NULL, tran_id, &req, DHCP_OFFER, IPC_DHCP_TIMEOUT, discon_poll_tube);
+	UINT discoverTimeout = ipc->DhcpDiscoverTimeoutMs > 0 ? ipc->DhcpDiscoverTimeoutMs : DEFAULT_DHCP_DISCOVER_TIMEOUT;
+	d = IPCSendDhcpRequest(ipc, NULL, tran_id, &req, DHCP_OFFER, discoverTimeout, discon_poll_tube);
 	if (d == NULL)
 	{
 		return false;
@@ -896,7 +902,7 @@ DHCPV4_DATA *IPCSendDhcpRequest(IPC *ipc, IP *dest_ip, UINT tran_id, DHCP_OPTION
 	}
 
 	// Retransmission interval
-	resend_interval = MAX(1, (timeout / 3) - 100);
+	resend_interval = MIN(IPC_DHCP_MAX_RESEND_INTERVAL, MAX(1, (timeout / 3) - 100));
 
 	// Time-out time
 	giveup_time = Tick64() + (UINT64)timeout;

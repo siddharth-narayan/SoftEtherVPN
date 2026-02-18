@@ -67,7 +67,7 @@ struct DYN_VALUE
 #define	DEFAULT_CIPHER_LIST			"ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:ECDHE+AES256:DHE+AES256:RSA+AES"
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
-#define PQ_GROUP_LIST				"p521_kyber1024:x25519_kyber768:P-521:X25519:P-256"
+#define PQ_GROUP_LIST				"X25519MLKEM768:p521_kyber1024:x25519_kyber768:P-521:X25519:P-256"
 #endif
 
 // SSL logging function
@@ -888,8 +888,6 @@ struct SSL_VERIFY_OPTION
 	LIST *CaList;					// Trusted CA list
 	X *SavedCert;					// Saved server certificate
 };
-
-#define	SSL_DEFAULT_CONNECT_TIMEOUT		(15 * 1000)		// SSL default timeout
 
 // Header for TCP Pair
 struct TCP_PAIR_HEADER
